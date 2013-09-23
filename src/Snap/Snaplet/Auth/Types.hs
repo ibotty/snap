@@ -18,6 +18,7 @@ import qualified Data.HashMap.Strict   as HM
 import           Data.Hashable         (Hashable)
 import           Data.Time
 import           Data.Text             (Text)
+import           Data.Text.Encoding    (decodeUtf8, encodeUtf8)
 import           Data.Typeable
 import           Snap.Snaplet
 
@@ -46,11 +47,11 @@ encrypt = flip makePassword defaultStrength
 -------------------------------------------------------------------------------
 -- | The underlying verify function, in case you need it for external
 -- processing.
-verify 
+verify
     :: ByteString               -- ^ Cleartext
     -> ByteString               -- ^ Encrypted reference
     -> Bool
-verify = verifyPassword 
+verify = verifyPassword
 
 
 ------------------------------------------------------------------------------
@@ -58,7 +59,7 @@ verify = verifyPassword
 -- be stuffed into a database.
 encryptPassword :: Password -> IO Password
 encryptPassword p@(Encrypted {}) = return p
-encryptPassword (ClearText p)    = Encrypted `fmap` encrypt p 
+encryptPassword (ClearText p)    = Encrypted `fmap` encrypt p
 
 
 ------------------------------------------------------------------------------
@@ -111,7 +112,7 @@ newtype UserId = UserId { unUid :: Text }
 
 ------------------------------------------------------------------------------
 -- | This will be replaced by a role-based permission system.
-data Role = Role ByteString
+data Role = Role Text
   deriving (Read, Show, Ord, Eq)
 
 
@@ -268,8 +269,8 @@ instance ToJSON AuthUser where
     , "locked_until"       .= userLockedOutUntil    u
     , "current_login_at"   .= userCurrentLoginAt    u
     , "last_login_at"      .= userLastLoginAt       u
-    , "current_ip"         .= userCurrentLoginIp    u
-    , "last_ip"            .= userLastLoginIp       u
+    , "current_ip"         .= fmap decodeUtf8 (userCurrentLoginIp    u)
+    , "last_ip"            .= fmap decodeUtf8 (userLastLoginIp       u)
     , "created_at"         .= userCreatedAt         u
     , "updated_at"         .= userUpdatedAt         u
     , "reset_token"        .= userResetToken        u
@@ -294,8 +295,8 @@ instance FromJSON AuthUser where
     <*> v .: "locked_until"
     <*> v .: "current_login_at"
     <*> v .: "last_login_at"
-    <*> v .: "current_ip"
-    <*> v .: "last_ip"
+    <*> fmap (fmap encodeUtf8) (v .: "current_ip")
+    <*> fmap (fmap encodeUtf8) (v .: "last_ip")
     <*> v .: "created_at"
     <*> v .: "updated_at"
     <*> v .: "reset_token"
@@ -307,14 +308,14 @@ instance FromJSON AuthUser where
 
 ------------------------------------------------------------------------------
 instance ToJSON Password where
-  toJSON (Encrypted x) = toJSON x
+  toJSON (Encrypted x) = toJSON $ decodeUtf8 x
   toJSON (ClearText _) =
       error "ClearText passwords can't be serialized into JSON"
 
 
 ------------------------------------------------------------------------------
 instance FromJSON Password where
-  parseJSON = fmap Encrypted . parseJSON
+  parseJSON = fmap (Encrypted . encodeUtf8) . parseJSON
 
 
 ------------------------------------------------------------------------------
